@@ -10,10 +10,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const user = Parse.User.current();
-    if (user) {
-      setCurrentUser(user);
-    }
+    setCurrentUser(Parse.User.current() || null);
     setIsLoading(false);
   }, []);
 
@@ -23,7 +20,7 @@ export default function HomePage() {
     user.set('password', password);
     try {
       await user.signUp();
-      setCurrentUser(Parse.User.current());
+      setCurrentUser(Parse.User.current() || null);
     } catch (error: any) {
       alert(`Error: ${error.message}`);
     }
