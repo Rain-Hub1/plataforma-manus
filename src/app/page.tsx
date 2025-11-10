@@ -3,15 +3,37 @@
 import { useState, useEffect } from 'react';
 import Parse from '@/lib/parse';
 
+async function setSessionCookie(sessionToken: string | undefined) {
+  if (sessionToken) {
+    document.cookie = `parse_session_token=${sessionToken}; path=/; SameSite=Lax;`;
+  } else {
+    document.cookie = 'parse_session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;';
+  }
+}
+
 export default function HomePage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [currentUser, setCurrentUser] = useState<Parse.User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasSupabaseConnection, setHasSupabaseConnection] = useState(false);
 
   useEffect(() => {
-    setCurrentUser(Parse.User.current() || null);
-    setIsLoading(false);
+    const checkUser = async () => {
+      const user = Parse.User.current();
+      setCurrentUser(user || null);
+      await setSessionCookie(user?.getSessionToken());
+
+      if (user) {
+        const SupabaseConnection = Parse.Object.extend('SupabaseConnection');
+        const query = new Parse.Query(SupabaseConnection);
+        query.equalTo('owner', user);
+        const connection = await query.first();
+        setHasSupabaseConnection(!!connection);
+      }
+      setIsLoading(false);
+    };
+    checkUser();
   }, []);
 
   const handleSignUp = async () => {
@@ -19,8 +41,9 @@ export default function HomePage() {
     user.set('username', username);
     user.set('password', password);
     try {
-      await user.signUp();
-      setCurrentUser(Parse.User.current() || null);
+      const signedUpUser = await user.signUp();
+      setCurrentUser(signedUpUser);
+      await setSessionCookie(signedUpUser.getSessionToken());
     } catch (error: any) {
       alert(`Error: ${error.message}`);
     }
@@ -30,6 +53,7 @@ export default function HomePage() {
     try {
       const user = await Parse.User.logIn(username, password);
       setCurrentUser(user);
+      await setSessionCookie(user.getSessionToken());
     } catch (error: any) {
       alert(`Error: ${error.message}`);
     }
@@ -38,6 +62,7 @@ export default function HomePage() {
   const handleLogout = async () => {
     await Parse.User.logOut();
     setCurrentUser(null);
+    await setSessionCookie(undefined);
   };
 
   const handleConnectSupabase = () => {
@@ -56,11 +81,20 @@ export default function HomePage() {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-gray-900 text-white text-center">
         <h1 className="text-4xl font-bold mb-4">Bem-vindo, {currentUser.get('username')}</h1>
-        <p className="mb-8">Você está na Plataforma Manus.</p>
-        <button onClick={handleConnectSupabase} className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg mb-4 w-full max-w-xs">
-          Conectar com Supabase
-        </button>
-        <button onClick={handleLogout} className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg w-full max-w-xs">
+        {hasSupabaseConnection ? (
+          <div className="bg-green-900 border border-green-700 p-4 rounded-lg mb-8">
+            <p>✅ Conexão com Supabase ativa!</p>
+            <a href="/chat" className="text-blue-400 hover:underline mt-2 inline-block">Ir para o Chat</a>
+          </div>
+        ) : (
+          <>
+            <p className="mb-8">Conecte seu projeto Supabase para começar.</p>
+            <button onClick={handleConnectSupabase} className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg mb-4 w-full max-w-xs">
+              Conectar com Supabase
+            </button>
+          </>
+        )}
+        <button onClick={handleLogout} className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg w-full max-w-xs mt-4">
           Sair
         </button>
       </main>
